@@ -230,22 +230,11 @@ def handle_content_block_delta(
     typed_event: ModelStreamEvent = ModelStreamEvent({})
 
     if "toolUse" in delta_content:
-        tool_use_delta = cast(dict[str, Any], delta_content["toolUse"])
-        current_tool_use = state["current_tool_use"]
+        if "input" not in state["current_tool_use"]:
+            state["current_tool_use"]["input"] = ""
 
-        if "toolUseId" in tool_use_delta and "toolUseId" not in current_tool_use:
-            current_tool_use["toolUseId"] = tool_use_delta["toolUseId"]
-
-        if "name" in tool_use_delta and "name" not in current_tool_use:
-            current_tool_use["name"] = tool_use_delta["name"]
-
-        if "input" not in current_tool_use:
-            current_tool_use["input"] = ""
-
-        if "input" in tool_use_delta:
-            current_tool_use["input"] += tool_use_delta["input"]
-
-        typed_event = ToolUseStreamEvent(delta_content, current_tool_use)
+        state["current_tool_use"]["input"] += delta_content["toolUse"]["input"]
+        typed_event = ToolUseStreamEvent(delta_content, state["current_tool_use"])
 
     elif "text" in delta_content:
         state["text"] += delta_content["text"]
@@ -344,7 +333,7 @@ def handle_content_block_stop(state: dict[str, Any]) -> dict[str, Any]:
         }
 
         if "signature" in state:
-            content_block["reasoningContent"]["reasoningText"]["signature"] = state.pop("signature")
+            content_block["reasoningContent"]["reasoningText"]["signature"] = state["signature"]
 
         content.append(content_block)
         state["reasoningText"] = ""

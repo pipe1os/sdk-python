@@ -170,14 +170,6 @@ def test_handle_content_block_start(chunk: ContentBlockStartEvent, exp_tool_use)
             {"current_tool_use": {"input": '{"key": '}},
             {"current_tool_use": {"input": '{"key": '}},
         ),
-        # Tool Use - Delta with toolUseId and name
-        (
-            {"delta": {"toolUse": {"toolUseId": "test_id", "name": "test_name", "input": '{"key": '}}},
-            {"type": "tool_use_stream"},
-            {"current_tool_use": {}},
-            {"current_tool_use": {"toolUseId": "test_id", "name": "test_name", "input": '{"key": '}},
-            {"current_tool_use": {"toolUseId": "test_id", "name": "test_name", "input": '{"key": '}},
-        ),
         # Text
         (
             {"delta": {"text": " world"}},
@@ -479,6 +471,7 @@ def test_handle_content_block_delta(event: ContentBlockDeltaEvent, event_type, s
                 "current_tool_use": {},
                 "text": "",
                 "reasoningText": "",
+                "signature": "123",
                 "citationsContent": [],
                 "redactedContent": b"",
             },
