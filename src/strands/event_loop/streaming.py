@@ -6,7 +6,7 @@ import threading
 import time
 import warnings
 from collections.abc import AsyncGenerator, AsyncIterable
-from typing import Any
+from typing import Any, cast
 
 from ..models.model import Model
 from ..tools import InvalidToolUseNameException
@@ -56,21 +56,29 @@ def _normalize_messages(messages: Messages) -> Messages:
     replaced_blank_message_content_text = False
     replaced_tool_names = False
 
+    new_messages: Messages = []
+
     for message in messages:
         # only modify assistant messages
         if "role" in message and message["role"] != "assistant":
+            new_messages.append(message)
             continue
         if "content" in message:
-            content = message["content"]
+            # Create shallow copies to prevent mutating the original history
+            new_message = cast(Message, dict(message))
+            content = list(message["content"])
+            new_message["content"] = content
+
             if len(content) == 0:
                 content.append({"text": "[blank text]"})
+                new_messages.append(new_message)
                 continue
 
             has_tool_use = False
 
             # Ensure the tool-uses always have valid names before sending
             # https://github.com/strands-agents/sdk-python/issues/1069
-            for item in content:
+            for i, item in enumerate(content):
                 if "toolUse" in item:
                     has_tool_use = True
                     tool_use: ToolUse = item["toolUse"]
@@ -78,7 +86,12 @@ def _normalize_messages(messages: Messages) -> Messages:
                     try:
                         validate_tool_use_name(tool_use)
                     except InvalidToolUseNameException:
-                        tool_use["name"] = "INVALID_TOOL_NAME"
+                        # Copy the item and toolUse to safely mutate
+                        new_item = cast(ContentBlock, dict(item))
+                        new_tool_use = cast(dict[str, Any], dict(tool_use))
+                        new_tool_use["name"] = "INVALID_TOOL_NAME"
+                        new_item["toolUse"] = cast(ToolUse, new_tool_use)
+                        content[i] = new_item
                         replaced_tool_names = True
 
             if has_tool_use:
@@ -89,10 +102,17 @@ def _normalize_messages(messages: Messages) -> Messages:
                     removed_blank_message_content_text = True
             else:
                 # Replace blank 'text' with '[blank text]' for assistant messages
-                for item in content:
+                for i, item in enumerate(content):
                     if "text" in item and not item["text"].strip():
+                        # Copy the item to safely mutate
+                        new_item = cast(ContentBlock, dict(item))
+                        new_item["text"] = "[blank text]"
+                        content[i] = new_item
                         replaced_blank_message_content_text = True
-                        item["text"] = "[blank text]"
+
+            new_messages.append(new_message)
+        else:
+            new_messages.append(message)  # type: ignore[unreachable]
 
     if removed_blank_message_content_text:
         logger.debug("removed blank message context text")
@@ -101,7 +121,7 @@ def _normalize_messages(messages: Messages) -> Messages:
     if replaced_tool_names:
         logger.debug("replaced invalid tool name")
 
-    return messages
+    return new_messages
 
 
 def remove_blank_messages_content_text(messages: Messages) -> Messages:
@@ -210,11 +230,23 @@ def handle_content_block_delta(
     typed_event: ModelStreamEvent = ModelStreamEvent({})
 
     if "toolUse" in delta_content:
-        if "input" not in state["current_tool_use"]:
-            state["current_tool_use"]["input"] = ""
+        tool_use_delta = delta_content["toolUse"]
+        tool_use_delta_dict = cast(dict[str, Any], tool_use_delta)
+        current_tool_use = state["current_tool_use"]
 
-        state["current_tool_use"]["input"] += delta_content["toolUse"]["input"]
-        typed_event = ToolUseStreamEvent(delta_content, state["current_tool_use"])
+        if "toolUseId" in tool_use_delta_dict and "toolUseId" not in current_tool_use:
+            current_tool_use["toolUseId"] = tool_use_delta_dict["toolUseId"]
+
+        if "name" in tool_use_delta_dict and "name" not in current_tool_use:
+            current_tool_use["name"] = tool_use_delta_dict["name"]
+
+        if "input" not in current_tool_use:
+            current_tool_use["input"] = ""
+
+        if "input" in tool_use_delta:
+            current_tool_use["input"] += tool_use_delta["input"]
+
+        typed_event = ToolUseStreamEvent(delta_content, current_tool_use)
 
     elif "text" in delta_content:
         state["text"] += delta_content["text"]
@@ -313,7 +345,7 @@ def handle_content_block_stop(state: dict[str, Any]) -> dict[str, Any]:
         }
 
         if "signature" in state:
-            content_block["reasoningContent"]["reasoningText"]["signature"] = state["signature"]
+            content_block["reasoningContent"]["reasoningText"]["signature"] = state.pop("signature")
 
         content.append(content_block)
         state["reasoningText"] = ""

@@ -108,6 +108,20 @@ def test_normalize_blank_messages_content_text(messages, exp_result):
     assert tru_result == exp_result
 
 
+def test_normalize_messages_does_not_mutate_original():
+    import copy
+
+    original_messages = [
+        {"role": "assistant", "content": [{"text": " \n"}, {"toolUse": {"name": "invalid tool"}}]},
+    ]
+    expected_original = copy.deepcopy(original_messages)
+
+    _ = strands.event_loop.streaming._normalize_messages(original_messages)
+
+    # The original messages structure should remain completely untouched
+    assert original_messages == expected_original
+
+
 def test_handle_message_start():
     event: MessageStartEvent = {"role": "test"}
 
@@ -155,6 +169,14 @@ def test_handle_content_block_start(chunk: ContentBlockStartEvent, exp_tool_use)
             {"current_tool_use": {}},
             {"current_tool_use": {"input": '{"key": '}},
             {"current_tool_use": {"input": '{"key": '}},
+        ),
+        # Tool Use - Delta with toolUseId and name
+        (
+            {"delta": {"toolUse": {"toolUseId": "test_id", "name": "test_name", "input": '{"key": '}}},
+            {"type": "tool_use_stream"},
+            {"current_tool_use": {}},
+            {"current_tool_use": {"toolUseId": "test_id", "name": "test_name", "input": '{"key": '}},
+            {"current_tool_use": {"toolUseId": "test_id", "name": "test_name", "input": '{"key": '}},
         ),
         # Text
         (
@@ -457,7 +479,6 @@ def test_handle_content_block_delta(event: ContentBlockDeltaEvent, event_type, s
                 "current_tool_use": {},
                 "text": "",
                 "reasoningText": "",
-                "signature": "123",
                 "citationsContent": [],
                 "redactedContent": b"",
             },
