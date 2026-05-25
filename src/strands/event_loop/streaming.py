@@ -230,15 +230,14 @@ def handle_content_block_delta(
     typed_event: ModelStreamEvent = ModelStreamEvent({})
 
     if "toolUse" in delta_content:
-        tool_use_delta = delta_content["toolUse"]
-        tool_use_delta_dict = cast(dict[str, Any], tool_use_delta)
+        tool_use_delta = cast(dict[str, Any], delta_content["toolUse"])
         current_tool_use = state["current_tool_use"]
 
-        if "toolUseId" in tool_use_delta_dict and "toolUseId" not in current_tool_use:
-            current_tool_use["toolUseId"] = tool_use_delta_dict["toolUseId"]
+        if "toolUseId" in tool_use_delta and "toolUseId" not in current_tool_use:
+            current_tool_use["toolUseId"] = tool_use_delta["toolUseId"]
 
-        if "name" in tool_use_delta_dict and "name" not in current_tool_use:
-            current_tool_use["name"] = tool_use_delta_dict["name"]
+        if "name" in tool_use_delta and "name" not in current_tool_use:
+            current_tool_use["name"] = tool_use_delta["name"]
 
         if "input" not in current_tool_use:
             current_tool_use["input"] = ""
